@@ -6,8 +6,17 @@ const { notFound, errorHandler } = require('./middleware/error.middleware');
 const app = express();
 
 // --- Middleware dasar ---
-app.use(cors());                 // Frontend (Vercel) -> API (Render)
-app.use(express.json());         // Parser body JSON
+// CORS: di produksi dibatasi ke origin frontend (FRONTEND_URL dari env Render),
+// di pengembangan lokal terbuka. Tanpa FRONTEND_URL -> allow all (dev mode).
+const allowedOrigin = process.env.FRONTEND_URL;
+app.use(
+  cors({
+    origin: allowedOrigin ? allowedOrigin.split(',').map((s) => s.trim()) : true,
+    methods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
+  })
+);
+app.use(express.json()); // Parser body JSON
 
 // --- Health check (dipakai Render untuk monitoring) ---
 app.get('/api/health', (req, res) => {
