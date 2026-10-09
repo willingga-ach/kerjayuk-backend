@@ -1,0 +1,120 @@
+// KerjaYuk v1.1 — schema.prisma
+// Sesuai PRD v1.1: AC-1 (version / Compare-and-Swap), AC-3 (token_version),
+// AC-5 (@@index pada status Log & createdAt Lowongan)
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum Role {
+  PELAMAR
+  RECRUITER
+  ADMIN
+}
+
+// Matriks status adaptif (AC-2): Ditolak BISA kembali ke Diproses (dengan notes wajib)
+enum StatusLamaran {
+  DIPROSES
+  DITERIMA
+  DITOLAK
+}
+
+model User {
+  id            String   @id @default(uuid()) @db.Uuid
+  nama          String
+  email         String   @unique
+  password_hash String
+  role          Role     @default(PELAMAR)
+
+  // AC-3: Token Versioning untuk revoke JWT instan saat logout
+  token_version Int @default(1) @map("token_version")
+
+  // AC-4: URL portofolio divalidasi allowlist host (github.com, linkedin.com, dst.)
+  portfolio_url String? @map("portfolio_url")
+
+  created_at DateTime @default(now()) @map("created_at")
+  updated_at DateTime @updatedAt @map("updated_at")
+
+  // Relasi
+  lamaran_dibuat  Lamaran[]  @relation("PelamarLamaran")
+  lowongan_dibuat Lowongan[] @relation("RecruiterLowongan")
+  log_perubahan   LogStatus[] @relation("AdminLogStatus")
+
+  @@map("users")
+}
+
+model Lowongan {
+  id          String @id @default(uuid()) @db.Uuid
+  recruiterId String @map("recruiter_id") @db.Uuid
+  judul       String
+  deskripsi   String
+  perusahaan  String
+  is_open     Boolean @default(true) @map("is_open")
+
+  created_at DateTime @default(now()) @map("created_at")
+  updated_at DateTime @updatedAt @map("updated_at")
+
+  recruiter User      @relation("RecruiterLowongan", fields: [recruiterId], references: [id], onDelete: Cascade)
+  lamaran   Lamaran[]
+
+  // AC-5: index pada created_at untuk paginasi + tie-breaker
+  @@index([created_at(sort: Desc)])
+  @@index([recruiterId])
+  @@map("lowongan")
+}
+
+model Lamaran {
+  id          String @id @default(uuid()) @db.Uuid
+  pelamarId   String @map("pelamar_id") @db.Uuid
+  lowonganId  String @map("lowongan_id") @db.Uuid
+
+  status StatusLamaran @default(DIPROSES)
+
+  // AC-1: kolom version untuk Compare-and-Swap (WHERE version = current, lalu +1)
+  version Int @default(1)
+
+  // Catatan evaluasi — wajib diisi saat transisi Ditolak -> Diproses (AC-2)
+  notes String?
+
+  created_at DateTime @default(now()) @map("created_at")
+  updated_at DateTime @updatedAt @map("updated_at")
+
+  pelamar  User        @relation("PelamarLamaran", fields: [pelamarId], references: [id], onDelete: Cascade)
+  lowongan Lowongan    @relation(fields: [lowonganId], references: [id], onDelete: Cascade)
+  logs     LogStatus[]
+
+  // Satu pelamar hanya boleh melamar satu kali per lowongan
+  @@unique([pelamarId, lowonganId])
+  @@index([status])
+  @@index([pelamarId])
+  @@index([lowonganId])
+  @@map("lamaran")
+}
+
+model LogStatus {
+  id         String        @id @default(uuid()) @db.Uuid
+  lamaranId  String        @map("lamaran_id") @db.Uuid
+  changedBy  String        @map("changed_by") @db.Uuid
+  status_lama StatusLamaran? @map("status_lama")
+  status_baru StatusLamaran @map("status_baru")
+
+  // AC-2: catatan wajib saat Ditolak -> Diproses
+  notes String?
+
+  created_at DateTime @default(now()) @map("created_at")
+
+  lamaran   Lamaran @relation(fields: [lamaranId], references: [id], onDelete: Cascade)
+  pengubah  User    @relation("AdminLogStatus", fields: [changedBy], references: [id])
+
+  // AC-5: index pada kolom status di tabel Log
+  @@index([status_baru])
+  @@index([lamaranId])
+  @@map("log_status")
+}
+

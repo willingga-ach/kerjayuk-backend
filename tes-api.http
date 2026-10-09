@@ -1,0 +1,209 @@
+### ============================================================
+### KerjaYuk v1.1 — Pengujian API (REST Client VS Code)
+### Jalankan request berurutan dari atas ke bawah.
+### Token otomatis tertangkap lewat response reference {{name.response.body.token}}
+### ============================================================
+
+@baseUrl = http://localhost:3000/api
+
+### 0. Health check
+GET http://localhost:3000/api/health
+
+### ============================================================
+### 1. AUTENTIKASI (AC-3: Token Versioning)
+### ============================================================
+
+### 1a. Login RECRUITER (token disimpan sebagai {{loginRecruiter...}})
+# @name loginRecruiter
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{
+  "email": "recruiter@kerjayuk.id",
+  "password": "password123"
+}
+
+### 1b. Login PELAMAR (token disimpan sebagai {{loginPelamar...}})
+# @name loginPelamar
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{
+  "email": "pelamar@kerjayuk.id",
+  "password": "password123"
+}
+
+### 1c. Cek sesi (wajib login)
+GET {{baseUrl}}/auth/me
+Authorization: Bearer {{loginPelamar.response.body.token}}
+
+### ============================================================
+### 2. LOWONGAN (AC-5: Paginasi limit max 50 + tie-breaker created_at)
+### ============================================================
+
+### 2a. Daftar lowongan — paginasi normal (page 1, 10 baris)
+GET {{baseUrl}}/lowongan?page=1&limit=10
+Authorization: Bearer {{loginPelamar.response.body.token}}
+
+### 2b. Daftar lowongan — client minta 999, HARUS ter-cuk ke 50 (cek meta.limit)
+GET {{baseUrl}}/lowongan?limit=999
+Authorization: Bearer {{loginPelamar.response.body.token}}
+
+### 2c. Daftar lowongan — hanya yang masih buka
+GET {{baseUrl}}/lowongan?status=buka
+Authorization: Bearer {{loginPelamar.response.body.token}}
+
+### 2d. Buat lowongan baru (RECRUITER)
+# @name createLowongan
+POST {{baseUrl}}/lowongan
+Content-Type: application/json
+Authorization: Bearer {{loginRecruiter.response.body.token}}
+
+{
+  "judul": "Backend Developer",
+  "deskripsi": "Membangun API Express.js + PostgreSQL",
+  "perusahaan": "KerjaYuk Tech"
+}
+
+### 2e. Tutup lowongan yang baru dibuat (is_open -> false)
+PATCH {{baseUrl}}/lowongan/{{createLowongan.response.body.lowongan.id}}/toggle
+Authorization: Bearer {{loginRecruiter.response.body.token}}
+
+### 2f. Pelamar mencoba melamar lowongan yang SUDAH DITUTUP (harap 400)
+POST {{baseUrl}}/lamaran
+Content-Type: application/json
+Authorization: Bearer {{loginPelamar.response.body.token}}
+
+{
+  "lowonganId": "{{createLowongan.response.body.lowongan.id}}"
+}
+
+### ============================================================
+### 3. LAMARAN — PENDAFTARAN (PELAMAR)
+### ============================================================
+
+### 3a. Ambil satu lowongan yang masih buka (ganti manual bila perlu)
+GET {{baseUrl}}/lowongan?status=buka&limit=1
+Authorization: Bearer {{loginPelamar.response.body.token}}
+
+### 3b. Pelamar mendaftar (ganti lowonganId dengan id dari 3a)
+# @name applyJob
+POST {{baseUrl}}/lamaran
+Content-Type: application/json
+Authorization: Bearer {{loginPelamar.response.body.token}}
+
+{
+  "lowonganId": "GANTI-DENGAN-ID-LOWONGAN"
+}
+
+### 3c. Melamar LAGI di lowongan yang sama (harap 409 — unique constraint)
+POST {{baseUrl}}/lamaran
+Content-Type: application/json
+Authorization: Bearer {{loginPelamar.response.body.token}}
+
+{
+  "lowonganId": "GANTI-DENGAN-ID-LOWONGAN"
+}
+
+### 3d. Daftar lamaran milik pelamar (paginasi)
+GET {{baseUrl}}/lamaran?page=1&limit=10
+Authorization: Bearer {{loginPelamar.response.body.token}}
+
+### ============================================================
+### 4. UPDATE STATUS LAMARAN (AC-1 CAS + AC-2 Status Adaptif)
+### Ganti :id dengan id lamaran, sesuaikan current_version & status lama.
+### ============================================================
+
+### 4a. Update status DIPROSES -> DITERIMA (CAS sukses, version 1 -> 2)
+PATCH {{baseUrl}}/lamaran/GANTI-DENGAN-ID-LAMARAN/status
+Content-Type: application/json
+Authorization: Bearer {{loginRecruiter.response.body.token}}
+
+{
+  "status_baru": "DITERIMA",
+  "current_version": 1,
+  "notes": "Kandidat lolos tahap teknis"
+}
+
+### 4b. Kirim ULANG current_version LAMA = 1 (harap 409 Conflict — CAS)
+PATCH {{baseUrl}}/lamaran/GANTI-DENGAN-ID-LAMARAN/status
+Content-Type: application/json
+Authorization: Bearer {{loginRecruiter.response.body.token}}
+
+{
+  "status_baru": "DITOLAK",
+  "current_version": 1
+}
+
+### 4c. Ubah ke DITOLAK dengan versi terbaru (version 2)
+PATCH {{baseUrl}}/lamaran/GANTI-DENGAN-ID-LAMARAN/status
+Content-Type: application/json
+Authorization: Bearer {{loginRecruiter.response.body.token}}
+
+{
+  "status_baru": "DITOLAK",
+  "current_version": 2,
+  "notes": "Belum sesuai kualifikasi saat ini"
+}
+
+### 4d. UNDO: DITOLAK -> DIPROSES TANPA notes (harap 400 — AC-2)
+PATCH {{baseUrl}}/lamaran/GANTI-DENGAN-ID-LAMARAN/status
+Content-Type: application/json
+Authorization: Bearer {{loginRecruiter.response.body.token}}
+
+{
+  "status_baru": "DIPROSES",
+  "current_version": 3,
+  "notes": ""
+}
+
+### 4e. UNDO: DITOLAK -> DIPROSES DENGAN notes (harap sukses — AC-2)
+PATCH {{baseUrl}}/lamaran/GANTI-DENGAN-ID-LAMARAN/status
+Content-Type: application/json
+Authorization: Bearer {{loginRecruiter.response.body.token}}
+
+{
+  "status_baru": "DIPROSES",
+  "current_version": 3,
+  "notes": "Evaluasi ulang: kandidat menambah portofolio baru"
+}
+
+### 4f. Riwayat log perubahan status (audit undo)
+GET {{baseUrl}}/lamaran/GANTI-DENGAN-ID-LAMARAN/log
+Authorization: Bearer {{loginRecruiter.response.body.token}}
+
+### ============================================================
+### 5. LOGOUT & REVOKASI TOKEN (AC-3)
+### ============================================================
+
+### 5a. Logout pelamar (token_version di DB +1)
+POST {{baseUrl}}/auth/logout
+Authorization: Bearer {{loginPelamar.response.body.token}}
+
+### 5b. Pakai token LAMA setelah logout (harap 401 — sesi dicabut)
+GET {{baseUrl}}/auth/me
+Authorization: Bearer {{loginPelamar.response.body.token}}
+
+### ============================================================
+### 6. UJI ROLE & ERROR HANDLING
+### ============================================================
+
+### 6a. PELAMAR mencoba buat lowongan (harap 403 — hanya RECRUITER/ADMIN)
+POST {{baseUrl}}/lowongan
+Content-Type: application/json
+Authorization: Bearer {{loginPelamar.response.body.token}}
+
+{
+  "judul": "Tidak Boleh",
+  "deskripsi": "x",
+  "perusahaan": "y"
+}
+
+### 6b. Endpoint tidak dikenal (harap 404 JSON)
+GET {{baseUrl}}/tidak-ada
+
+### 6c. Body rusak / tanpa field wajib (harap 400 JSON)
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{}

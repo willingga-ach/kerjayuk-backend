@@ -1,0 +1,37 @@
+# ===== KerjaYuk Backend — .gitignore =====
+
+# Dependencies
+node_modules/
+
+# Environment & kredensial — JANGAN PERNAH commit!
+.env
+.env.local
+.env.production
+*.env
+# contoh tetap ikut:
+!.env.example
+
+# Prisma
+prisma/*.db
+prisma/dev.db
+
+# Build & logs
+dist/
+build/
+logs/
+*.log
+npm-debug.log*
+
+# Editor & OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# File sementara hasil sesi agent/tes lokal
+tok.tmp
+resp.tmp
+state.json
+tokens.json
+test-e2e.js
+check-db.js
