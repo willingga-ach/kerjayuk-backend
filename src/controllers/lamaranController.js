@@ -18,10 +18,18 @@ async function listLamaran(req, res, next) {
     const limit = Math.min(parseInt(req.query.limit, 10) || 20, MAX_LIMIT);
     const skip = (page - 1) * limit;
 
-    const where =
-      req.user.role === 'PELAMAR'
-        ? { pelamarId: req.user.id }
-        : { lowongan: { recruiterId: req.user.id } };
+    // Skop data per role:
+    // - PELAMAR  -> hanya lamaran miliknya sendiri
+    // - ADMIN     -> melihat SEMUA lamaran (tinjauan admin)
+    // - RECRUITER -> hanya lamaran pada lowongan miliknya sendiri
+    let where;
+    if (req.user.role === 'PELAMAR') {
+      where = { pelamarId: req.user.id };
+    } else if (req.user.role === 'ADMIN') {
+      where = {};
+    } else {
+      where = { lowongan: { recruiterId: req.user.id } };
+    }
 
     const [total, data] = await prisma.$transaction([
       prisma.lamaran.count({ where }),
@@ -114,9 +122,18 @@ async function updateStatusLamaran(req, res, next) {
       return res.status(400).json({ error: 'current_version wajib berupa integer' });
     }
 
-    const lamaran = await prisma.lamaran.findUnique({ where: { id } });
+    const lamaran = await prisma.lamaran.findUnique({
+      where: { id },
+      include: { lowongan: { select: { recruiterId: true } } },
+    });
     if (!lamaran) {
       return res.status(404).json({ error: 'Lamaran tidak ditemukan' });
+    }
+
+    // IDOR guard: RECRUITER hanya boleh mengubah lamaran pada lowongan miliknya sendiri.
+    // ADMIN diizinkan menyentuh semua lamaran.
+    if (req.user.role === 'RECRUITER' && lamaran.lowongan.recruiterId !== req.user.id) {
+      return res.status(403).json({ error: 'Akses ditolak untuk lamaran ini' });
     }
 
     // --- AC-2: Matriks Status Adaptif ---
@@ -176,6 +193,18 @@ async function updateStatusLamaran(req, res, next) {
  */
 async function getLamaranLog(req, res, next) {
   try {
+    // IDOR guard: verifikasi kepemilikan sebelum mengembalikan log.
+    const lamaran = await prisma.lamaran.findUnique({
+      where: { id: req.params.id },
+      include: { lowongan: { select: { recruiterId: true } } },
+    });
+    if (!lamaran) {
+      return res.status(404).json({ error: 'Lamaran tidak ditemukan' });
+    }
+    if (req.user.role === 'RECRUITER' && lamaran.lowongan.recruiterId !== req.user.id) {
+      return res.status(403).json({ error: 'Akses ditolak untuk lamaran ini' });
+    }
+
     const limit = Math.min(parseInt(req.query.limit, 10) || 20, MAX_LIMIT);
     const logs = await prisma.logStatus.findMany({
       where: { lamaranId: req.params.id },

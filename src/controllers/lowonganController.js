@@ -108,6 +108,11 @@ async function toggleLowongan(req, res, next) {
       return res.status(404).json({ error: 'Lowongan tidak ditemukan' });
     }
 
+    // IDOR guard: RECRUITER hanya boleh meng-toggle lowongan miliknya sendiri.
+    if (req.user.role === 'RECRUITER' && lowongan.recruiterId !== req.user.id) {
+      return res.status(403).json({ error: 'Akses ditolak untuk lowongan ini' });
+    }
+
     const updated = await prisma.lowongan.update({
       where: { id: lowongan.id },
       data: { is_open: !lowongan.is_open },
