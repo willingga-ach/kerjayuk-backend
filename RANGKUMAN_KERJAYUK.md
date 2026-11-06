@@ -218,3 +218,16 @@ Semua probe yang menyentuh **database (Prisma)** mengembalikan 500, termasuk yan
 - URL Render (`kerjayuk-backend.onrender.com`) tampaknya **tidak aktif/berisi service lain**; frontend production memakai Railway, jadi fokus perbaikan di Railway.
 - `.env` lokal frontend menunjuk `http://localhost:3000/api` (untuk dev lokal, wajar).
 
+### Status verifikasi ulang (sudah diperbaiki)
+Setelah perbaikan di sisi Railway, verifikasi ulang menunjukkan **backend sudah berfungsi penuh**:
+
+| Probe | Hasil | Status |
+|---|---|---|
+| `GET /api/health` (Railway) | **200 OK** | ✅ |
+| `POST /api/auth/login` (recruiter) | **200** + token JWT + user `RECRUITER` | ✅ |
+| `POST /api/auth/login` (pelamar) | **200** + token + user `PELAMAR` | ✅ |
+| `GET /api/auth/me` (pakai token) | **200** `{ user: {...} }` | ✅ |
+| `GET /api/lowongan` (pakai token) | **200**, total 6 lowongan | ✅ |
+
+> Kesimpulan: masalah login "Terjadi kesalahan pada server" **sudah teratasi**; backend Railway dapat login dan menyajikan data.
+
