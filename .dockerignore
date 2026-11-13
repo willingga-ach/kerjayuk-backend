@@ -1,0 +1,16 @@
+node_modules
+npm-debug.log
+.git
+.gitignore
+.env
+.env.local
+*.log
+Dockerfile
+.dockerignore
+koyeb.yaml
+README-DEPLOY-KOYEB.md
+RANGKUMAN_KERJAYUK.md
+test
+tes-api.http
+dist
+build
