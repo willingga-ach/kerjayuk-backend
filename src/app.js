@@ -1,13 +1,17 @@
-// KerjaYuk v1.1 — Inisialisasi aplikasi Express (dipisah dari server.js agar mudah di-test)
+// KerjaYuk v1.2 — Inisialisasi aplikasi Express (dipisah dari server.js agar mudah di-test)
 const express = require('express');
 const cors = require('cors');
+const helmet = require('helmet');
+const { apiLimiter } = require('./middleware/rateLimit.middleware');
 const { notFound, errorHandler } = require('./middleware/error.middleware');
 
 const app = express();
 
-// --- Middleware dasar ---
-// CORS: di produksi dibatasi ke origin frontend (FRONTEND_URL dari env Render),
-// di pengembangan lokal terbuka. Tanpa FRONTEND_URL -> allow all (dev mode).
+// Di belakang proxy (Render/Heroku) agar IP asli terbaca oleh rate limiter
+app.set('trust proxy', 1);
+
+app.use(helmet()); // header keamanan: nosniff, frame, referrer-policy, dst.
+
 const allowedOrigin = process.env.FRONTEND_URL;
 app.use(
   cors({
@@ -16,20 +20,15 @@ app.use(
     allowedHeaders: ['Content-Type', 'Authorization'],
   })
 );
-app.use(express.json()); // Parser body JSON
+app.use(express.json({ limit: '100kb' })); // Parser body JSON + batas ukuran
 
-// --- Health check (dipakai Render untuk monitoring) ---
 app.get('/api/health', (req, res) => {
-  res.status(200).json({ status: 'ok', service: 'kerjayuk-backend', version: '1.1' });
+  res.status(200).json({ status: 'ok', service: 'kerjayuk-backend', version: '1.2' });
 });
 
-// --- Router terpusat: seluruh middleware auth + controller terpasang di sini ---
-app.use('/api', require('./routes/api'));
+app.use('/api', apiLimiter, require('./routes/api'));
 
-// --- 404 untuk endpoint yang tidak dikenal ---
 app.use(notFound);
-
-// --- Global error handler WAJIB paling bawah (HTTP 500 JSON standar) ---
 app.use(errorHandler);
 
 module.exports = app;

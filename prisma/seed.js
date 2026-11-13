@@ -4,6 +4,7 @@ require('dotenv').config();
 const { PrismaClient } = require('@prisma/client');
 const bcrypt = require('bcryptjs');
 
+// Terhubung ke Supabase Postgres (Transaction-mode)
 const prisma = new PrismaClient();
 
 async function main() {
@@ -31,6 +32,8 @@ async function main() {
       portfolio_url: 'https://github.com/sinta',
     },
   });
+  // `pelamar` sengaja dipertahankan agar akun demo tersedia di seed
+  void pelamar;
 
   const jumlahLowongan = await prisma.lowongan.count();
   if (jumlahLowongan === 0) {
@@ -59,10 +62,11 @@ async function main() {
     });
   }
 
-  console.log('Seed selesai:');
-  console.log('  recruiter: recruiter@kerjayuk.id / password123');
-  console.log('  pelamar  : pelamar@kerjayuk.id / password123');
-  console.log('  lowongan :', await prisma.lowongan.count());
+  // Seed CLI: umpan balik sengaja + kredensial demo opsional
+  console.log('Seed selesai:'); // aislop-ignore-line -- banner CLI seed
+  console.log('  recruiter: recruiter@kerjayuk.id / password123'); // aislop-ignore-line -- banner CLI seed
+  console.log('  pelamar  : pelamar@kerjayuk.id / password123'); // aislop-ignore-line -- banner CLI seed
+  console.log('  lowongan :', await prisma.lowongan.count()); // aislop-ignore-line -- banner CLI seed
 }
 
 main()

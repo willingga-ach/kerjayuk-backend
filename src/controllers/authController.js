@@ -1,14 +1,21 @@
-// KerjaYuk v1.1 — Auth Controller (AC-3: Token Versioning)
+// KerjaYuk v1.2 — Auth Controller (AC-3: Token Versioning)
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const prisma = require('../lib/prisma');
 const { validatePortfolioUrl } = require('../utils/portfolioValidator'); // AC-4
 
-/**
- * POST /api/auth/login
- * Body: { email, password }
- * JWT yang diterbitkan MEMUAT token_version dari database (AC-3).
- */
+// Proyeksi user yang aman dikirim ke klien (tanpa password_hash / token_version)
+function serializeUser(user) {
+  return {
+    id: user.id,
+    nama: user.nama,
+    email: user.email,
+    role: user.role,
+    portfolio_url: user.portfolio_url,
+  };
+}
+
+/** POST /api/auth/login — { email, password }; JWT memuat token_version (AC-3) */
 async function login(req, res, next) {
   try {
     const { email, password } = req.body || {};
@@ -36,23 +43,14 @@ async function login(req, res, next) {
 
     res.json({
       token,
-      user: {
-        id: user.id,
-        nama: user.nama,
-        email: user.email,
-        role: user.role,
-        portfolio_url: user.portfolio_url,
-      },
+      user: serializeUser(user),
     });
   } catch (err) {
     next(err);
   }
 }
 
-/**
- * POST /api/auth/logout (wajib login)
- * AC-3: token_version + 1 di database -> SEMUA token lama tercabut instan.
- */
+/** POST /api/auth/logout — token_version+1 sehingga semua token lama tercabut */
 async function logout(req, res, next) {
   try {
     await prisma.user.update({
@@ -66,18 +64,12 @@ async function logout(req, res, next) {
   }
 }
 
-/**
- * GET /api/auth/me (wajib login)
- */
+/** GET /api/auth/me (wajib login) */
 async function me(req, res) {
   res.json({ user: req.user });
 }
 
-/**
- * POST /api/auth/register (publik)
- * Body: { nama, email, password, portfolio_url? }
- * Mendaftarkan akun PELAMAR baru. AC-4: portfolio_url divalidasi allowlist host.
- */
+/** POST /api/auth/register — akun PELAMAR; portfolio_url divalidasi allowlist (AC-4) */
 async function register(req, res, next) {
   try {
     const { nama, email, password, portfolio_url } = req.body || {};
@@ -103,7 +95,7 @@ async function register(req, res, next) {
     const user = await prisma.user.create({
       data: {
         nama,
-        email,
+        email: email.trim().toLowerCase(),
         password_hash: await bcrypt.hash(password, 10),
         role: 'PELAMAR',
         portfolio_url: cek.host ? portfolio_url.trim() : null,
@@ -112,18 +104,14 @@ async function register(req, res, next) {
 
     res.status(201).json({
       message: 'Registrasi berhasil, silakan login',
-      user: { id: user.id, nama: user.nama, email: user.email, role: user.role },
+      user: serializeUser(user),
     });
   } catch (err) {
     next(err);
   }
 }
 
-/**
- * PATCH /api/auth/profile (wajib login)
- * Body: { nama?, portfolio_url? }
- * AC-4: perubahan portfolio_url divalidasi allowlist host.
- */
+/** PATCH /api/auth/profile (wajib login) — { nama?, portfolio_url? } */
 async function updateProfile(req, res, next) {
   try {
     const { nama, portfolio_url } = req.body || {};
@@ -136,8 +124,7 @@ async function updateProfile(req, res, next) {
       data.nama = nama.trim();
     }
     if (portfolio_url !== undefined) {
-      // AC-4
-      const cek = validatePortfolioUrl(portfolio_url);
+      const cek = validatePortfolioUrl(portfolio_url); // AC-4
       if (!cek.valid) {
         return res.status(400).json({ error: cek.error });
       }
@@ -154,13 +141,7 @@ async function updateProfile(req, res, next) {
 
     res.json({
       message: 'Profil berhasil diperbarui',
-      user: {
-        id: user.id,
-        nama: user.nama,
-        email: user.email,
-        role: user.role,
-        portfolio_url: user.portfolio_url,
-      },
+      user: serializeUser(user),
     });
   } catch (err) {
     next(err);

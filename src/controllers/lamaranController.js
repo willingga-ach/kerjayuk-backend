@@ -131,12 +131,11 @@ async function updateStatusLamaran(req, res, next) {
     }
 
     // IDOR guard: RECRUITER hanya boleh mengubah lamaran pada lowongan miliknya sendiri.
-    // ADMIN diizinkan menyentuh semua lamaran.
     if (req.user.role === 'RECRUITER' && lamaran.lowongan.recruiterId !== req.user.id) {
       return res.status(403).json({ error: 'Akses ditolak untuk lamaran ini' });
     }
 
-    // --- AC-2: Matriks Status Adaptif ---
+    // AC-2: DITOLAK -> DIPROSES wajib catatan evaluasi
     const undoPenolakan = lamaran.status === 'DITOLAK' && status_baru === 'DIPROSES';
     if (undoPenolakan && (!notes || notes.trim() === '')) {
       return res.status(400).json({
@@ -144,7 +143,7 @@ async function updateStatusLamaran(req, res, next) {
       });
     }
 
-    // --- AC-1: Compare-and-Swap dalam transaksi atomik ---
+    // AC-1: Compare-and-Swap dalam transaksi atomik
     try {
       const hasil = await prisma.$transaction(async (tx) => {
         const updated = await tx.lamaran.updateMany({
